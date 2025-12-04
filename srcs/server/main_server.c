@@ -6,15 +6,13 @@
 /*   By: relaforg <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/03 15:20:01 by relaforg          #+#    #+#             */
-/*   Updated: 2025/12/04 14:00:21 by relaforg         ###   ########.fr       */
+/*   Updated: 2025/12/04 14:46:07 by relaforg         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <unistd.h>
 #include <signal.h>
 #include "libft.h"
-
-#define SIZE_BYTES 4
 
 typedef struct s_message
 {
@@ -24,27 +22,30 @@ typedef struct s_message
 
 t_message	message;
 
-void	signal_handler(int signal)
+void	signal_handler(int signal, siginfo_t *info, void *context)
 {
 	static unsigned int	bit_count;
 	static unsigned int	c;
+	(void) context;
 
 	c = c << 1;
 	if (signal == SIGUSR2)
 		c = c | 1;
 	bit_count++;
-	message.message[23] = 'd';
-	if (bit_count % 8 == 0)
+	if (bit_count % 32 == 0)
 	{
-		if (message.size == 0 && bit_count == 8 * SIZE_BYTES)
+		if (message.size == 0)
 		{
 			message.size = c;
 			message.message = ft_calloc(message.size, sizeof(char));
 			if (!message.message)
+			{
+				kill(info->si_pid, SIGUSR2);
 				exit(1);
+			}
 			c = 0;
 		}
-		else if (message.size)
+		else
 		{
 			if (!c)
 			{
@@ -52,9 +53,11 @@ void	signal_handler(int signal)
 				message.size = 0;
 				bit_count = 0;
 				free(message.message);
+				message.message = NULL;
+				kill(info->si_pid, SIGUSR1);
 			}
 			else
-				message.message[bit_count / 8 - SIZE_BYTES - 1] = c;
+				message.message[bit_count / 32 - 2] = c;
 			c = 0;
 		}
 	}
@@ -78,7 +81,8 @@ int	main(void)
 	message.message = NULL;
 	message.size = 0;
 	ft_bzero(&act, sizeof(act));
-	act.sa_handler = signal_handler;
+	act.sa_flags = SA_SIGINFO;
+	act.sa_sigaction = signal_handler;
 	ft_bzero(&act_quit, sizeof(act));
 	act_quit.sa_handler = clean_exit;
 	sigaction(SIGUSR1, &act, NULL);
